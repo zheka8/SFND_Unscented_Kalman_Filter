@@ -13,7 +13,7 @@ UKF::UKF() {
   use_laser_ = false;
 
   // if this is false, radar measurements will be ignored (except during init)
-  use_radar_ = true;
+  use_radar_ = false;
 
   // initial state vector
   x_ = VectorXd(5);
@@ -257,10 +257,29 @@ void UKF::UpdateLidar(MeasurementPackage meas_package) {
   // get the measurment and it's size
   VectorXd z = meas_package.raw_measurements_;
   int n_z = z.size();
+  
+  // Measurement matrix
+  MatrixXd H = MatrixXd(n_z, n_x_);
+  H << 1, 0, 0, 0, 0,
+       0, 1, 0, 0, 0;
 
-  // set measurement covariance
-  //R(0,0)
+  // Measurement covariance matrix
+  MatrixXd R = MatrixXd(n_z, n_z);
+  R << std_laspx_ * std_laspx_, 0,
+       0, std_laspy_ * std_laspy_;
 
+  VectorXd z_pred = VectorXd(n_z);
+  z_pred = x_.head(n_z);
+
+  VectorXd z_diff = z - z_pred;
+  MatrixXd S = H * P_ * H.transpose() + R;
+  MatrixXd K = P_ * H.transpose() * S.inverse();
+
+  MatrixXd I = MatrixXd::Identity(n_x_, n_x_);
+
+  // Update the mean and covariance matrix
+  x_ = x_ + (K * z_diff);
+  P_ = (I - K * H) * P_;
 }
 
 void UKF::UpdateRadar(MeasurementPackage meas_package) {
@@ -293,17 +312,22 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
 
     double rho  = sqrt(p_x*p_x + p_y*p_y);
     double phi  = atan2(p_y,p_x);
-    double rhod = (p_x*std::cos(yaw)*v + p_y*std::sin(yaw)*v) / rho;
+    double rhod = 0.0;
+    if (std::fabs(rho) > 0.001) {
+      rhod = (p_x*std::cos(yaw)*v + p_y*std::sin(yaw)*v) / rho;
+    }
 
     Zsig(0,i) = rho;
     Zsig(1,i) = phi;
     Zsig(2,i) = rhod;
   }
+  std::cout<<Zsig<<std::endl;
 
   // predicted mean meas.
   for (int i=0; i < 2*n_aug_+1; ++i) {
     z_pred += weights_(i) * Zsig.col(i);
   }
+  std::cout<<z_pred<<std::endl;
 
   // innovation covariance matrix S
   for (int i=0; i < 2*n_aug_+1; ++i) {
@@ -316,6 +340,7 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
 
     S += weights_(i) * z_diff * z_diff.transpose();
   }
+  //std::cout<<S<<std::endl;
 
   // add measurement noise covariance matrix
   MatrixXd R = MatrixXd(n_z, n_z);
@@ -362,5 +387,6 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
   // update state mean and covariance
   x_ += K * z_diff;
   P_ -= K*S*K.transpose();
+  //std::cout<<x_<<std::endl;
 
 }
