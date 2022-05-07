@@ -25,7 +25,7 @@ UKF::UKF() {
   std_a_ = 3.0; //30;
 
   // Process noise standard deviation yaw acceleration in rad/s^2
-  std_yawdd_ = 1.0; //30;
+  std_yawdd_ = 0.6; //30;
   
   /**
    * DO NOT MODIFY measurement noise values below.
@@ -88,7 +88,7 @@ UKF::UKF() {
     
   // set the weights vector
   double weight_0 = lambda_/ (lambda_ + n_aug_);
-  double weight = 0.5 / (lambda_ + n_aug_);
+  double weight = 1.0 / (2.0 * (lambda_ + n_aug_));
   weights_(0) = weight_0;
   for(int i=1; i < 2*n_aug_ + 1; ++i) {
     weights_(i) = weight;
@@ -105,13 +105,14 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
 
   if (!is_initialized_) {
     // initialize the filter with measurement values and don't predict
-    if (use_laser_ && meas_package.sensor_type_ == MeasurementPackage::LASER) {      
+    if (meas_package.sensor_type_ == MeasurementPackage::LASER) {      
       x_(0) = meas_package.raw_measurements_(0); // position
       x_(1) = meas_package.raw_measurements_(1); // velocity
       P_(0,0) = std_laspx_ * std_laspx_; // covariance x
       P_(1,1) = std_laspy_ * std_laspy_; // covariance y
+      std::cout<<"init LASER"<<x_<<std::endl;
       
-    } else if (use_radar_ && meas_package.sensor_type_ == MeasurementPackage::RADAR) {
+    } else if (meas_package.sensor_type_ == MeasurementPackage::RADAR) {
       // convert coordinates from polar to cartesian
       double rho, phi, rhodot;
       rho = meas_package.raw_measurements_(0);
@@ -124,6 +125,7 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
 
       // velocity
       x_(2) = sqrt(rhodot * std::cos(phi) * rhodot * std::cos(phi) + rhodot * std::sin(phi) * rhodot * std::sin(phi));      
+      std::cout<<"init RADAR"<<x_<<std::endl;
     }
 
     time_us_ = meas_package.timestamp_;
@@ -163,13 +165,15 @@ void UKF::Prediction(double delta_t) {
 
   // populate augmented matrices
   x_aug.head(n_x_) = x_;
-  x_aug(n_x_) = 0;      // mean accel noise
-  x_aug(n_x_ + 1) = 0;  // mean yaw double dot rate noise
+  x_aug(n_x_) = 0.0;      // mean accel noise
+  x_aug(n_x_ + 1) = 0.0;  // mean yaw double dot rate noise
 
   P_aug.fill(0.0);
   P_aug.topLeftCorner(n_x_, n_x_) = P_;
   P_aug(n_x_, n_x_) = std_a_ * std_a_;
   P_aug(n_x_+1, n_x_+1) = std_yawdd_ * std_yawdd_;
+
+  std::cout<<x_<<std::endl;
 
   // create square root matrix
   MatrixXd L = P_aug.llt().matrixL();
@@ -180,6 +184,7 @@ void UKF::Prediction(double delta_t) {
     Xsig_aug.col(i+1)        = x_aug + sqrt(lambda_ + n_aug_) * L.col(i);
     Xsig_aug.col(i+1+n_aug_) = x_aug - sqrt(lambda_ + n_aug_) * L.col(i);
   }
+  //std::cout<<"Xsig_aug_"<<Xsig_aug<<std::endl;
 
   // transform sigma points into measurement space
   for (int i = 0; i < 2*n_aug_ + 1; ++i) {
@@ -198,7 +203,7 @@ void UKF::Prediction(double delta_t) {
     // avoid division by zero
     if (fabs(yawd) > 0.001) {
       px_p = p_x + v/yawd * (std::sin(yaw + yawd*delta_t) - std::sin(yaw));
-      py_p = p_y + v/yawd * (std::cos(yaw) - cos(yaw*yawd*delta_t));
+      py_p = p_y + v/yawd * (std::cos(yaw) - cos(yaw + yawd*delta_t));
     } else {
       px_p = p_x + v*delta_t*std::cos(yaw);
       py_p = p_y + v*delta_t*std::sin(yaw);
@@ -224,14 +229,15 @@ void UKF::Prediction(double delta_t) {
   }
   
   // predicted state mean
-  //std::cout<<"predicted state mean"<<std::endl;
   x_.fill(0.0);
   for (int i = 0; i < 2*n_aug_+1; ++i) {
     x_ += weights_(i) * Xsig_pred_.col(i);
   }
+  //std::cout<<"Xsig_pred_"<<Xsig_pred_<<std::endl;
 
   // predicted state covariance
   //std::cout<<"predicted state covariance"<<std::endl;
+  /*
   P_.fill(0.0);
   for (int i = 0; i < 2*n_aug_+1; ++i) {
     // state difference
@@ -244,6 +250,7 @@ void UKF::Prediction(double delta_t) {
     P_ += weights_(i) * x_diff * x_diff.transpose();
   }
   //std::cout<<"Prediction End"<<std::endl;
+  */
 }
 
 void UKF::UpdateLidar(MeasurementPackage meas_package) {
@@ -321,13 +328,13 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
     Zsig(1,i) = phi;
     Zsig(2,i) = rhod;
   }
-  std::cout<<Zsig<<std::endl;
+  //std::cout<<Zsig<<std::endl;
 
   // predicted mean meas.
   for (int i=0; i < 2*n_aug_+1; ++i) {
     z_pred += weights_(i) * Zsig.col(i);
   }
-  std::cout<<z_pred<<std::endl;
+  //std::cout<<z_pred<<std::endl;
 
   // innovation covariance matrix S
   for (int i=0; i < 2*n_aug_+1; ++i) {
