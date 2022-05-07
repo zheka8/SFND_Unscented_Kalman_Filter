@@ -4,12 +4,13 @@
 using Eigen::MatrixXd;
 using Eigen::VectorXd;
 
+
 /**
  * Initializes Unscented Kalman filter
  */
 UKF::UKF() {
   // if this is false, laser measurements will be ignored (except during init)
-  use_laser_ = true;
+  use_laser_ = false;
 
   // if this is false, radar measurements will be ignored (except during init)
   use_radar_ = true;
@@ -145,7 +146,7 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
       UpdateRadar(meas_package);
     }
   }
-
+  //std::cout<<"Process Measurement End"<<std::endl;
 }
 
 void UKF::Prediction(double delta_t) {
@@ -175,7 +176,7 @@ void UKF::Prediction(double delta_t) {
 
   // create augmented sigma points
   Xsig_aug.col(0) = x_aug;
-  for (int i = 0; i < n_aug_; ++i) {
+  for (int i = 1; i < n_aug_; ++i) {
     Xsig_aug.col(i+1)        = x_aug + sqrt(lambda_ + n_aug_) * L.col(i);
     Xsig_aug.col(i+1+n_aug_) = x_aug - sqrt(lambda_ + n_aug_) * L.col(i);
   }
@@ -223,12 +224,14 @@ void UKF::Prediction(double delta_t) {
   }
   
   // predicted state mean
+  //std::cout<<"predicted state mean"<<std::endl;
   x_.fill(0.0);
   for (int i = 0; i < 2*n_aug_+1; ++i) {
-    x_ += weights_(i) + Xsig_pred_.col(i);
+    x_ += weights_(i) * Xsig_pred_.col(i);
   }
 
   // predicted state covariance
+  //std::cout<<"predicted state covariance"<<std::endl;
   P_.fill(0.0);
   for (int i = 0; i < 2*n_aug_+1; ++i) {
     // state difference
@@ -238,9 +241,9 @@ void UKF::Prediction(double delta_t) {
     while (x_diff(3) >  M_PI) x_diff(3)-=2.*M_PI;
     while (x_diff(3) < -M_PI) x_diff(3)+=2.*M_PI;
 
-    P_ += weights_ * x_diff * x_diff.transpose();
+    P_ += weights_(i) * x_diff * x_diff.transpose();
   }
-
+  //std::cout<<"Prediction End"<<std::endl;
 }
 
 void UKF::UpdateLidar(MeasurementPackage meas_package) {
@@ -289,7 +292,7 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
     double yaw      = Xsig_pred_(3,i);
 
     double rho  = sqrt(p_x*p_x + p_y*p_y);
-    double phi  = atan2(py/px);
+    double phi  = atan2(p_y,p_x);
     double rhod = (p_x*std::cos(yaw)*v + p_y*std::sin(yaw)*v) / rho;
 
     Zsig(0,i) = rho;
@@ -321,7 +324,8 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
        0, 0, std_radrd_*std_radrd_;
   
   S += R;
-
+  
+  //std::cout<<"cross correlation"<<std::endl;
   // calculate cross correlation matrix
   MatrixXd Tc = MatrixXd(n_x_, n_z);
   Tc.fill(0.0);
@@ -340,10 +344,11 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
     //angle normalization
     while (x_diff(3) >  M_PI) x_diff(3)-=2.*M_PI;
     while (x_diff(3) < -M_PI) x_diff(3)+=2.*M_PI;
-
-    Tc += weights_(i) * x_diff * x_diff.transpose();
+    //std::cout<<"before"<<std::endl;
+    Tc += weights_(i) * x_diff * z_diff.transpose();
+    //std::cout<<"after"<<std::endl;
   }
-
+  //std::cout<<"radar Kalman gain"<<std::endl;
   // kalman gain
   MatrixXd K = Tc * S.inverse();
 

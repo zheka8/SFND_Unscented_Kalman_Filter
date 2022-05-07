@@ -1,5 +1,6 @@
 #include <iostream>
 #include "tools.h"
+#include <bits/stdc++.h>
 
 using namespace std;
 using std::vector;
