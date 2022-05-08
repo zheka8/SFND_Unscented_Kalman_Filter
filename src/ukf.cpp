@@ -13,7 +13,7 @@ UKF::UKF() {
   use_laser_ = true;
 
   // if this is false, radar measurements will be ignored (except during init)
-  use_radar_ = false;
+  use_radar_ = true;
 
   // initial state vector
   x_ = VectorXd(5);
@@ -74,7 +74,7 @@ UKF::UKF() {
   weights_ = VectorXd(2*n_aug_ + 1);
 
   // Sigma point spreading parameter
-  lambda_ = 3.0 - n_x_;
+  lambda_ = 3.0 - n_x_; // n_aug_?
 
   // set all matrices with initial values
   x_.fill(0.0);
@@ -111,9 +111,9 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
       x_(1) = meas_package.raw_measurements_(1); // velocity
       P_(0,0) = std_laspx_ * std_laspx_; // covariance x
       P_(1,1) = std_laspy_ * std_laspy_; // covariance y
-      P_(2,2) = 100;
-      P_(3,3) = 100;
-      P_(4,4) = 10;
+      P_(2,2) = 1;
+      P_(3,3) = 1;
+      P_(4,4) = 1;
       std::cout<<"init LASER"<<x_<<std::endl;
       
     } else if (meas_package.sensor_type_ == MeasurementPackage::RADAR) {
@@ -137,19 +137,19 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
       x_(2) = v;
       std::cout<<"init RADAR"<<x_<<std::endl;
 
-      
+    
       P_ << std_radr_ * std_radr_, 0, 0, 0, 0,
             0, std_radr_ * std_radr_, 0, 0, 0,
             0, 0, std_radrd_ * std_radrd_, 0, 0,
-            0, 0, 0, std_radphi_ * std_radphi_, 0, 0,
+            0, 0, 0, std_radphi_ * std_radphi_, 0,
             0, 0, 0, 0, std_radrd_ * std_radrd_;
-
+/*
       P_ << 1, 0, 0, 0, 0,
-      0, 1, 0, 0, 0,
-      0, 0, 0.5, 0, 0,
-      0, 0, 0, 0.5, 0, 0,
-      0, 0, 0, 0, 0.5;
-
+            0, 1, 0, 0, 0,
+            0, 0, 0.5, 0, 0,
+            0, 0, 0, 0.5, 0,
+            0, 0, 0, 0, 0.5;
+*/
     }
 
     time_us_ = meas_package.timestamp_;
@@ -261,6 +261,8 @@ void UKF::Prediction(double delta_t) {
     x_ += weights_(i) * Xsig_pred_.col(i);
   }
   std::cout<<"x_"<<x_<<std::endl;
+  while (x_(3) >  M_PI) x_(3)-=2.*M_PI;
+  while (x_(3) < -M_PI) x_(3)+=2.*M_PI;
 
   // predicted state covariance
   //std::cout<<"predicted state covariance"<<std::endl;
@@ -421,5 +423,8 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
   x_ += K * z_diff;
   P_ -= K*S*K.transpose();
   //std::cout<<x_<<std::endl;
+
+  while (x_(3) >  M_PI) x_(3)-=2.*M_PI;
+  while (x_(3) < -M_PI) x_(3)+=2.*M_PI;
 
 }
